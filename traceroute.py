@@ -40,18 +40,18 @@ class IPv4:
     def __init__(self, buffer: bytes):
         bits = ''.join(format(byte, '08b') for byte in [*buffer])
         self.version = int(bits[0:4], 2)
-        self.header_len = int(bits[4:8], 2)
+        self.header_len = int(bits[4:8], 2) * 4
         self.tos = int(bits[8:16], 2)
         self.length = int(bits[16:32], 2)
         self.id = int(bits[32:48], 2)
         self.flags = int(bits[48:51], 2)
-        self.frag_offset = int(bits[48:64], 2)
+        self.frag_offset = int(bits[51:64], 2)
         self.ttl = int(bits[64:72], 2)
         self.proto = int(bits[72:80], 2)
         self.cksum = int(bits[80:96], 2)
         byte_src = buffer[12:16]
         self.src = util.inet_ntoa(byte_src)
-        self.dst = util.inet_ntoa(buffer[16:])
+        self.dst = util.inet_ntoa(buffer[16:20])
         pass  # TODO
 
     def __str__(self) -> str:
@@ -109,6 +109,12 @@ class UDP:
             f"len {self.len}, cksum 0x{self.cksum:x})"
 
 # TODO feel free to add helper functions if you'd like
+def slice_byte(buffer_byte: bytes):         # Slice bytes of buffer into three bytes (2*IPv4 ICMP UDP)
+    route_IPv4 = IPv4(buffer_byte[:20])
+    route_ICMP = ICMP(buffer_byte[20:28])
+    my_IPv4 = IPv4(buffer_byte[28:48])
+    udp = UDP(buffer_byte[48:])
+    return (route_IPv4, route_ICMP, my_IPv4, udp)
 
 def traceroute(sendsock: util.Socket, recvsock: util.Socket, ip: str) \
         -> list[list[str]]:
@@ -135,19 +141,28 @@ def traceroute(sendsock: util.Socket, recvsock: util.Socket, ip: str) \
     #     util.print_result([], ttl)
     # return []
     msg = "miku"
-    sendsock.set_ttl(30)
-    sendsock.sendto(msg.encode(), (ip, 33434))
-    route_ips = []
-    if recvsock.recv_select():
-        buff, adress = recvsock.recvfrom()
-        print(f"Packet bytes: {buff.hex()}")
-        print(f"Packet is from ip: {adress[0]}")
-        print(f"Packet is from port: {adress[1]}")
-        route_ips.append(adress[0])
-    return route_ips
-
+    route_IPs = []
+    for i in range(TRACEROUTE_MAX_TTL):     # TTL == i + 1
+        sendsock.set_ttl(i + 1)
+        IPs = []
+        for attemp_times in range(PROBE_ATTEMPT_COUNT):
+            sendsock.sendto(msg.encode(), (ip, TRACEROUTE_PORT_NUMBER))
+            if recvsock.recv_select():
+                buff, address = recvsock.recvfrom()
+                route_IP, route_ICMP, my_IP, udp = slice_byte(buff)
+                if route_IP.src == ip:
+                    route_IPs.append([ip])
+                    return route_IPs
+                elif route_IP.src not in IPs:
+                    print(route_IP.src)
+                    IPs.append(route_IP.src)
+        route_IPs.append(IPs)
+    return route_IPs
 if __name__ == '__main__':
     args = util.parse_args()
     ip_addr = util.gethostbyname(args.host)
     print(f"traceroute to {args.host} ({ip_addr})")
-    traceroute(util.Socket.make_udp(), util.Socket.make_icmp(), ip_addr)
+    route_IPs = traceroute(util.Socket.make_udp(), util.Socket.make_icmp(), ip_addr)
+    for i in range(len(route_IPs)):
+        ttl = i + 1
+        util.print_result(route_IPs[i], ttl)
