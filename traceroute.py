@@ -38,7 +38,7 @@ class IPv4:
     dst: str
 
     def __init__(self, buffer: bytes):
-        bits = ''.join(format(byte, '08b') for byte in buffer)
+        bits = ''.join(format(byte, '08b') for byte in [*buffer])
         self.version = int(bits[0:4], 2)
         self.header_len = int(bits[4:8], 2)
         self.tos = int(bits[8:16], 2)
@@ -74,6 +74,10 @@ class ICMP:
     cksum: int
 
     def __init__(self, buffer: bytes):
+        bits = ''.join(format(byte, '08b') for byte in [*buffer])
+        self.type = int(bits[:8], 2)
+        self.code = int(bits[8:16], 2)
+        self.cksum = int(bits[16:32], 2) 
         pass  # TODO
 
     def __str__(self) -> str:
@@ -93,6 +97,11 @@ class UDP:
     cksum: int
 
     def __init__(self, buffer: bytes):
+        bits = ''.join(format(byte, '08b') for byte in [*buffer])
+        self.src_port = int(bits[:16], 2)
+        self.dst_port = int(bits[16:32], 2)
+        self.len = int(bits[32:48], 2)
+        self.cksum = int(bits[48:], 2)
         pass  # TODO
 
     def __str__(self) -> str:
