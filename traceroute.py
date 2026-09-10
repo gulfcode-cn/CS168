@@ -112,12 +112,12 @@ def traceroute(sendsock: util.Socket, recvsock: util.Socket, ip: str) \
     #     util.print_result([], ttl)
     # return []
     msg = "miku"
-    sendsock.set_ttl(1)
+    sendsock.set_ttl(30)
     sendsock.sendto(msg.encode(), (ip, 33434))
     route_ips = []
     if recvsock.recv_select():
         buff, adress = recvsock.recvfrom()
-        print(f"Packet bytes: {buff.hex}")
+        print(f"Packet bytes: {buff.hex()}")
         print(f"Packet is from ip: {adress[0]}")
         print(f"Packet is from port: {adress[1]}")
         route_ips.append(adress[0])
