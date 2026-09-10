@@ -108,10 +108,20 @@ def traceroute(sendsock: util.Socket, recvsock: util.Socket, ip: str) \
     """
 
     # TODO Add your implementation
-    for ttl in range(1, TRACEROUTE_MAX_TTL+1):
-        util.print_result([], ttl)
-    return []
-
+    # for ttl in range(1, TRACEROUTE_MAX_TTL+1):
+    #     util.print_result([], ttl)
+    # return []
+    msg = "miku"
+    sendsock.set_ttl(30)
+    sendsock.sendto(msg.encode(), (ip, 33434))
+    route_ips = []
+    if recvsock.recv_select():
+        buff, adress = recvsock.recvfrom()
+        print(f"Packet bytes: {buff.hex()}")
+        print(f"Packet is from ip: {adress[0]}")
+        print(f"Packet is from port: {adress[1]}")
+        route_ips.append(adress[0])
+    return route_ips
 
 if __name__ == '__main__':
     args = util.parse_args()
