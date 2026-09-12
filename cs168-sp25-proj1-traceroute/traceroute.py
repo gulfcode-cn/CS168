@@ -111,10 +111,13 @@ class UDP:
 # TODO feel free to add helper functions if you'd like
 def slice_byte(buffer_byte: bytes):         # Slice bytes of buffer into three bytes (2*IPv4 ICMP UDP)
     route_IPv4 = IPv4(buffer_byte[:20])
-    route_ICMP = ICMP(buffer_byte[20:28])
-    my_IPv4 = IPv4(buffer_byte[28:48])
-    udp = UDP(buffer_byte[48:])
+    route_ICMP = ICMP(buffer_byte[route_IPv4.header_len: route_IPv4.header_len + 8])
+    my_IPv4 = IPv4(buffer_byte[route_IPv4.header_len + 8: route_IPv4.header_len + 28])
+    udp = UDP(buffer_byte[route_IPv4.header_len + 28: route_IPv4.header_len + 36])
     return (route_IPv4, route_ICMP, my_IPv4, udp)
+
+def check_payload(my_ip: IPv4):  # Check UDP can be parsed
+    return my_ip.version == 4 and my_ip.proto == util.IPPROTO_UDP
 
 def traceroute(sendsock: util.Socket, recvsock: util.Socket, ip: str) \
         -> list[list[str]]:
@@ -145,17 +148,57 @@ def traceroute(sendsock: util.Socket, recvsock: util.Socket, ip: str) \
     for i in range(TRACEROUTE_MAX_TTL):     # TTL == i + 1
         sendsock.set_ttl(i + 1)
         IPs = []
+        ids = []
+        duplicate = False
         for attemp_times in range(PROBE_ATTEMPT_COUNT):
             sendsock.sendto(msg.encode(), (ip, TRACEROUTE_PORT_NUMBER))
-            if recvsock.recv_select():
-                buff, address = recvsock.recvfrom()
-                route_IP, route_ICMP, my_IP, udp = slice_byte(buff)
-                if route_IP.src == ip:
-                    route_IPs.append([ip])
-                    return route_IPs
-                elif route_IP.src not in IPs:
-                    print(route_IP.src)
-                    IPs.append(route_IP.src)
+        while True:
+            if len(ids) == 3 and not duplicate:
+                break
+
+            if not recvsock.recv_select():
+                break
+
+            buff, address = recvsock.recvfrom()
+
+            if len(buff) < 56: # test b6: check len of buff
+                continue
+
+            route_IP, route_ICMP, my_IP, udp = slice_byte(buff)
+
+            if route_IP.proto != 1: # check b7
+                continue
+
+            if route_ICMP.type not in (3, 11):  # check b2
+                continue
+
+            if route_ICMP.type == 11 and route_ICMP.code != 0:  # check  b3
+                continue
+
+            if not check_payload(my_IP): # check b5
+                continue
+
+            if my_IP.ttl != i + 1:
+                continue
+
+            if my_IP.dst != ip:
+                continue
+
+            if udp.dst_port != TRACEROUTE_PORT_NUMBER:
+                continue
+
+            if my_IP.id in ids:
+                duplicate = True
+                continue
+            else:
+                ids.append(my_IP.id)
+
+            if route_IP.src == ip:
+                route_IPs.append([ip])
+                return route_IPs
+            elif route_IP.src not in IPs:
+                IPs.append(route_IP.src)
+            
         route_IPs.append(IPs)
     return route_IPs
 if __name__ == '__main__':
