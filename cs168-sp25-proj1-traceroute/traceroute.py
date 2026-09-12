@@ -116,6 +116,9 @@ def slice_byte(buffer_byte: bytes):         # Slice bytes of buffer into three b
     udp = UDP(buffer_byte[48:])
     return (route_IPv4, route_ICMP, my_IPv4, udp)
 
+def check_payload(my_ip: IPv4):  # Check UDP can be parsed
+    return my_ip.version == 4 and my_ip.proto == util.IPPROTO_UDP
+
 def traceroute(sendsock: util.Socket, recvsock: util.Socket, ip: str) \
         -> list[list[str]]:
     """ Run traceroute and returns the discovered path.
@@ -149,13 +152,28 @@ def traceroute(sendsock: util.Socket, recvsock: util.Socket, ip: str) \
             sendsock.sendto(msg.encode(), (ip, TRACEROUTE_PORT_NUMBER))
             if recvsock.recv_select():
                 buff, address = recvsock.recvfrom()
+                if len(buff) < 56: # test b6: check len of buff
+                    continue
+
                 route_IP, route_ICMP, my_IP, udp = slice_byte(buff)
+                if route_IP.proto != 1: # check b7
+                    continue
+
+                if route_ICMP.type not in (3, 11):  # check b2
+                    continue
+
+                if route_ICMP.type == 11 and route_ICMP.code != 0:  # check  b3
+                    continue
+
+                if check_payload(my_IP) != True: # check b5
+                    continue
+
                 if route_IP.src == ip:
                     route_IPs.append([ip])
                     return route_IPs
                 elif route_IP.src not in IPs:
-                    print(route_IP.src)
                     IPs.append(route_IP.src)
+
         route_IPs.append(IPs)
     return route_IPs
 if __name__ == '__main__':
