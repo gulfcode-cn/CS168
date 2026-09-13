@@ -178,9 +178,6 @@ def traceroute(sendsock: util.Socket, recvsock: util.Socket, ip: str) \
             if not check_payload(my_IP): # check b5
                 continue
 
-            if my_IP.ttl != i + 1:
-                continue
-
             if my_IP.dst != ip:
                 continue
 
